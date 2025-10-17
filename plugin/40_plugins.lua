@@ -201,10 +201,39 @@ now_if_args(function()
 end)
 
 now_if_args(function()
+  add({
+    source = 'saghen/blink.cmp',
+    version = "v1.*",
+    build = "cargo build --release",
+    hooks = {
+      post_checkout = function()
+        vim.fn.system('cargo build --release')
+      end,
+    },
+  })
+  require('blink.cmp').setup({
+    completion = {
+      trigger = {
+        show_on_insert_on_trigger_character = false,
+        show_on_x_blocked_trigger_characters = {},
+      },
+      menu = {
+        auto_show = false,
+      },
+      ghost_text = {
+        enabled = false,
+      },
+    },
+  })
+
+  vim.lsp.config('*', { capabilities = require('blink.cmp').get_lsp_capabilities() })
+end)
+
+now_if_args(function()
   add('neovim/nvim-lspconfig')
 
   local lspconfig = require('lspconfig')
-  local capabilities = require('mini.completion').get_lsp_capabilities()
+  local capabilities = require('blink.cmp').get_lsp_capabilities()
 
   lspconfig.gopls.setup({
     capabilities = capabilities,
@@ -294,12 +323,57 @@ now_if_args(function()
 
   lspconfig.eslint.setup({
     capabilities = capabilities,
+    root_dir = function(fname)
+      -- Force eslint to use monorepo root config
+      local root = require('lspconfig.util').root_pattern(
+        'eslint.config.js',
+        '.eslintrc.js',
+        '.eslintrc.json',
+        '.eslintrc.yaml',
+        '.eslintrc.yml',
+        '.eslintrc.cjs',
+        '.git'
+      )(fname)
+      return root
+    end,
+    settings = {
+      workingDirectory = { mode = 'auto' }, -- Critical for monorepos
+      format = { enable = true },
+      lintTask = { enable = true },
+      codeAction = {
+        disableRuleComment = { enable = true, location = "separate_line" },
+        showRuleId = true,
+      },
+      onChangeHandlers = { default = "all" },
+      -- ADD TypeScript-specific settings
+      -- typescript = {
+      --   tsdk = vim.fn.getcwd() .. '/node_modules/typescript/lib',
+      -- },
+    },
     on_attach = function(client, bufnr)
+      -- Your existing BufWritePre autocmd
       vim.api.nvim_create_autocmd('BufWritePre', {
         buffer = bufnr,
         command = 'EslintFixAll',
       })
+
+      -- ADD: Ensure diagnostics show
+      vim.api.nvim_create_autocmd("BufWritePost", {
+        buffer = bufnr,
+        callback = function()
+          vim.cmd("EslintFixAll")
+        end,
+      })
     end,
+    -- ADD: Filetype filtering
+    filetypes = {
+      "javascript",
+      "javascriptreact",
+      "typescript",
+      "typescriptreact",
+      "vue",
+      "svelte",
+    },
   })
 end)
 
